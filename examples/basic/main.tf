@@ -12,66 +12,46 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-// TODO: We should build a Terraform module which handles/manages the creation
-//       of database, but for now we just deploy a simple container.
-resource "helm_release" "pxc_operator" {
-  name      = "pxc-operator"
-  namespace = "default"
-
-  repository = "https://percona.github.io/percona-helm-charts"
-  chart      = "pxc-operator"
-  version    = "1.13.1"
+terraform {
+  required_providers {
+    random = {
+      source  = "hashicorp/random"
+      version = "3.5.1"
+    }
+  }
 }
-resource "kubernetes_manifest" "pxc_cluster" {
-  depends_on = [
-    helm_release.pxc_operator
-  ]
 
-  manifest = {
-    apiVersion = "pxc.percona.com/v1"
-    kind       = "PerconaXtraDBCluster"
-    metadata = {
-      name      = "database"
-      namespace = helm_release.pxc_operator.metadata[0].namespace
-    }
-    spec = {
-      allowUnsafeConfigurations = true
-      crVersion                 = "1.13.0"
-      haproxy = {
-        enabled = true
-        size    = 1
-        image   = "percona/percona-xtradb-cluster-operator:1.13.0-haproxy"
-      }
-      pxc = {
-        size  = 1
-        image = "percona/percona-xtradb-cluster:5.7.39-31.61"
-        volumeSpec = {
-          persistentVolumeClaim = {
-            resources = {
-              requests = {
-                storage = "5G"
-              }
-            }
-          }
-        }
-      }
-    }
-  }
+resource "random_password" "password" {
+  length = 32
+}
 
-  wait {
-    condition {
-      type   = "ready"
-      status = "True"
-    }
+resource "kubernetes_namespace" "namespace" {
+  metadata {
+    name = "infra"
   }
+}
+
+module "mariadb" {
+  #checkov:skip=CKV_TF_1
+
+  source  = "vexxhost/mariadb/kubernetes"
+  version = "0.1.1"
+
+  name          = "mariadb"
+  namespace     = kubernetes_namespace.namespace.metadata[0].name
+  root_password = random_password.password.result
 }
 
 module "database" {
   source = "../../"
 
-  hostname                  = "${kubernetes_manifest.pxc_cluster.manifest.metadata.name}-haproxy.${kubernetes_manifest.pxc_cluster.manifest.metadata.namespace}"
-  job_namespace             = kubernetes_manifest.pxc_cluster.manifest.metadata.namespace
-  root_password_secret_name = "${kubernetes_manifest.pxc_cluster.manifest.metadata.name}-secrets"
+  depends_on = [
+    module.mariadb
+  ]
+
+  hostname                  = "mariadb"
+  job_namespace             = kubernetes_namespace.namespace.metadata[0].name
+  root_password_secret_name = "mariadb"
 
   name = "foobar"
 }

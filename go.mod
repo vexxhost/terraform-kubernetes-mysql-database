@@ -1,8 +1,11 @@
-module github.com/vexxhost/terraform-kuberentes-mysql-database
+module github.com/vexxhost/terraform-kubernetes-mysql-database
 
 go 1.20
 
-require github.com/gruntwork-io/terratest v0.43.13
+require (
+	github.com/gruntwork-io/terratest v0.43.13
+	github.com/vexxhost/terratest-toolkit v0.0.0-20230901051311-0e620fd492a0
+)
 
 require (
 	cloud.google.com/go v0.105.0 // indirect
